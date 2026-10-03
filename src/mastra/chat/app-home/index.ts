@@ -3,6 +3,7 @@ import { chat } from '../instance';
 import { registerGitHub } from './github';
 import { registerCustomInstructions } from './instructions';
 import { registerMCPServers } from './mcp';
+import { registerModel } from './model';
 import { registerScheduledTasks } from './scheduled-tasks';
 import { publishHome } from './view';
 
@@ -13,6 +14,7 @@ export function registerAppHome(): void {
     )
   );
   registerCustomInstructions({ publishHome });
+  registerModel({ publishHome });
   registerGitHub({ publishHome });
   registerMCPServers({ publishHome });
   registerScheduledTasks({ publishHome });

@@ -1,6 +1,12 @@
 import { eq } from 'drizzle-orm';
 import { rawId } from '../../lib/ids';
-import { type GitHubPermission, githubPermissionSchema } from '../../types';
+import {
+  DEFAULT_MODEL,
+  type GitHubPermission,
+  githubPermissionSchema,
+  type ModelId,
+  modelIdSchema,
+} from '../../types';
 import { db } from '../client';
 import { userSettings } from '../schema';
 
@@ -26,6 +32,27 @@ export async function setInstructions({
     .insert(userSettings)
     .values({ ...set, userId: rawId(userId) })
     .onConflictDoUpdate({ target: userSettings.userId, set });
+}
+
+export async function getModelChoice(userId: string): Promise<ModelId> {
+  const [row] = await db
+    .select({ model: userSettings.model })
+    .from(userSettings)
+    .where(eq(userSettings.userId, rawId(userId)));
+  return modelIdSchema.catch(DEFAULT_MODEL).parse(row?.model);
+}
+
+export async function setModelChoice({
+  userId,
+  model,
+}: {
+  userId: string;
+  model: ModelId;
+}): Promise<void> {
+  await db
+    .update(userSettings)
+    .set({ model, updatedAt: new Date() })
+    .where(eq(userSettings.userId, rawId(userId)));
 }
 
 interface GitHubSettings {

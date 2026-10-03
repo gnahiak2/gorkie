@@ -44,7 +44,3 @@ export const summarizer = {
 export const scheduledTasks = {
   minInterval: env.NODE_ENV === 'production' ? 30 * 60 * 1000 : 60 * 1000,
 };
-
-export const workingModel = {
-  ttl: 30 * 60 * 1000,
-};

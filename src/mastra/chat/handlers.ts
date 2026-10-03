@@ -1,12 +1,11 @@
 import type { Message, Thread } from 'chat';
-import { isUserAllowed } from '../lib/allowed-users';
 import { logger } from '../lib/logger';
+import { isUserAllowed } from '../lib/owner';
 import { attachments } from './attachments';
 import { slack } from './client';
 import { handleCommand } from './commands';
 import { withHistory } from './history';
 import { isComment } from './message';
-import { offerOptIn } from './onboarding';
 import { threadState } from './state';
 
 type DefaultHandler = (thread: Thread, message: Message) => Promise<void>;
@@ -58,8 +57,7 @@ export async function onMention(
   if (isFromBot(message)) {
     return;
   }
-  if (!(await isUserAllowed(message.author.userId))) {
-    await offerOptIn({ thread, user: message.author });
+  if (!isUserAllowed(message.author.userId)) {
     return;
   }
   if (slack.decodeThreadId(message.threadId).threadTs === message.id) {
@@ -84,7 +82,7 @@ export async function onSubscribedMessage(
   if (!(isFollowingThread || message.isMention)) {
     return;
   }
-  if (!(await isUserAllowed(message.author.userId))) {
+  if (!isUserAllowed(message.author.userId)) {
     return;
   }
   if (await handleCommand({ message, thread })) {
@@ -101,8 +99,7 @@ export async function onDirectMessage(
   if (isFromBot(message)) {
     return;
   }
-  if (!(await isUserAllowed(message.author.userId))) {
-    await offerOptIn({ thread, user: message.author });
+  if (!isUserAllowed(message.author.userId)) {
     return;
   }
   if (await handleCommand({ message, thread })) {

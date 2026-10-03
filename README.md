@@ -20,8 +20,8 @@ runs commands and inspects files without touching the host machine.
 
 - Slack-native replies for mentions, DMs, and subscribed thread follow-ups,
   streamed as they generate, with a typing indicator.
-- Optional opt-in allowlist (`OPT_IN_CHANNEL`): gate access to members of one
-  channel, with an in-Slack opt-in card for everyone else.
+- Single-owner bot: only the `OWNER_USER_ID` account gets replies, and everyone
+  else is ignored. The model is picked from the App Home and stored per user.
 - Per-thread [E2B][e2b] sandbox sessions: isolated cloud VMs, never the host.
   Full filesystem access (`read_file`/`write_file`/`edit_file`/`list_files`/
   `delete_file`/`file_stat`) plus shell command execution
@@ -39,7 +39,6 @@ runs commands and inspects files without touching the host machine.
 - Slack Canvas tools: create, list, read, edit, and look up sections.
 - Recurring scheduled tasks (cron-based, create/list/pause/resume/delete).
   Each run posts back into the conversation where it was scheduled.
-- AI image generation, uploaded back into the Slack thread as a file.
 - Most tools load on demand through tool search, so the base tool list and the
   prompt stay small.
 - [Observational Memory][om] compresses a long conversation into an
@@ -53,8 +52,8 @@ See [TODO.md](./TODO.md) for open work and known issues.
 - [Bun][bun] and TypeScript
 - [Mastra][mastra], agent runtime + [channels][channels]
 - [Vercel Chat SDK][chat-sdk] with `@chat-adapter/slack` (via Mastra channels)
-- Model routing across the [Hack Club][hackclub] proxy and opencode.ai, which
-  falls back per gateway when one fails
+- [Command Code][command-code] Provider API as the single model gateway, with
+  the model chosen from the App Home and a fallback if it fails
 - [E2B][e2b] sandbox sessions
 - [Exa][exa] for web search and page fetching
 - [PostgreSQL][postgres] via `@mastra/pg`
@@ -66,7 +65,7 @@ Create a new [Slack app](https://api.slack.com/apps) from a manifest using
 [`slack-manifest.json`](./slack-manifest.json), which turns on Socket Mode,
 the App Home, scopes, and event subscriptions. You also need [Bun][bun], a
 [PostgreSQL][postgres] database, an [E2B][e2b] API key, an [Exa][exa] API key,
-and model keys for both [Hack Club][hackclub] and [OpenCode][opencode].
+and a [Command Code][command-code] API key.
 
 ```bash
 # Clone this repository
@@ -105,9 +104,8 @@ local database named `gorkie`. Mastra creates its tables on first run.
 | `SLACK_BOT_TOKEN` | yes | Bot User OAuth token (`xoxb-…`) |
 | `SLACK_APP_TOKEN` | yes | App-level token with `connections:write` (`xapp-…`) |
 | `SLACK_USER_TOKEN` | yes | Slack user token, not the bot token, used for public-channel search. Mint it with `search:read.public` only; gorkie verifies the granted scopes on first use and refuses the token if it also carries `search:read.im`, `search:read.mpim`, or `search:read.private`. See [docs/slack-search.md](docs/slack-search.md) |
-| `OPT_IN_CHANNEL` | no | Slack channel id gating access to members only (opt-in allowlist); unset means everyone is allowed |
-| `HACKCLUB_API_KEY` | yes | Hack Club AI proxy key, tried for every model |
-| `OPENCODE_API_KEY` | yes | opencode.ai/zen gateway key, tried alongside Hack Club |
+| `OWNER_USER_ID` | yes | The only Slack account gorkie answers (`U…`). Messages from anyone else are ignored |
+| `COMMANDCODE_API_KEY` | yes | [Command Code][command-code] Provider API key. Every model, both wire formats |
 | `DATABASE_URL` | yes | Postgres connection string |
 | `LANGFUSE_PUBLIC_KEY` | yes | Langfuse public key. Tracing is the only production exporter, so the agent refuses to start without it |
 | `LANGFUSE_SECRET_KEY` | yes | Langfuse secret key |
@@ -166,8 +164,7 @@ bun run check:spelling
 [chat-sdk]: https://github.com/vercel/chat-sdk
 [e2b]: https://e2b.dev
 [exa]: https://exa.ai
-[hackclub]: https://ai.hackclub.com
-[opencode]: https://opencode.ai/docs/zen
+[command-code]: https://commandcode.ai/docs/provider
 [postgres]: https://www.postgresql.org
 [duckdb]: https://duckdb.org
 [bun]: https://bun.sh

@@ -67,3 +67,7 @@ output.txt
 
 # Mastra Cloud platform link (self-hosted, not used)
 .mastra-project.json
+
+# Command Code local state: permission allowlist and personal taste, both
+# machine-specific, neither part of the project
+.commandcode/

@@ -48,12 +48,6 @@ export const statuses: Record<string, (args: Args) => string> = {
       ? fit('is checking ', fileName(path), '…')
       : 'is checking a file…';
   },
-  generate_image: (args) => {
-    const prompt = str(args, 'prompt');
-    return prompt
-      ? fit('is generating an image of "', prompt, '"…')
-      : 'is generating an image…';
-  },
   get_channel_info: () => 'is checking a channel…',
   get_permalink: () => 'is getting a Slack link…',
   get_process_output: (args) => {

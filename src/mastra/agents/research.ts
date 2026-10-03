@@ -10,7 +10,6 @@ import { defaultErrorProcessors } from '../lib/error-handling';
 import { stepCountIs } from '../lib/tools';
 import { sandbox } from '../processors/sandbox';
 import { moveToolImages } from '../processors/tool-media';
-import { workingModel } from '../processors/working-model';
 import * as research from '../prompts/agents/research';
 import { slackToolPrompt } from '../prompts/slack';
 import { scout } from '../providers';
@@ -60,5 +59,5 @@ export const researchAgent = new Agent({
     stopWhen: stepCountIs(config.maxSteps),
     autoResumeSuspendedTools: true,
   },
-  outputProcessors: [sandbox, workingModel('research')],
+  outputProcessors: [sandbox],
 });

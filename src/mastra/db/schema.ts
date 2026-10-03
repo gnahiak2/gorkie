@@ -41,6 +41,7 @@ export const mcpServers = pgTable(
 export const userSettings = pgTable('user_settings', {
   userId: text('user_id').primaryKey(),
   instructions: text('instructions'),
+  model: text('model'),
   githubPermission: text('github_permission').$type<GitHubPermission>(),
   githubThreads: boolean('github_threads'),
   updatedAt: timestamp('updated_at', { withTimezone: true })

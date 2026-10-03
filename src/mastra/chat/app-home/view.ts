@@ -1,8 +1,13 @@
 import { getGitHubCredential } from '../../db/queries/github';
 import { listMCPServers } from '../../db/queries/mcps';
-import { getGitHubSettings, getInstructions } from '../../db/queries/settings';
+import {
+  getGitHubSettings,
+  getInstructions,
+  getModelChoice,
+} from '../../db/queries/settings';
 import { countInstallations } from '../../lib/github';
 import { logger } from '../../lib/logger';
+import { isUserAllowed } from '../../lib/owner';
 import type { GitHubCredential } from '../../types';
 import { slack } from '../client';
 import { content } from '../content';
@@ -10,6 +15,7 @@ import { githubBlocks } from './github';
 import { customInstructionsBlocks } from './instructions';
 import { fitHome, type HomeSection } from './limit';
 import { mcpServersBlocks } from './mcp';
+import { modelBlocks } from './model';
 import { scheduledTasksBlocks } from './scheduled-tasks';
 
 async function settled<T>({
@@ -29,6 +35,11 @@ async function settled<T>({
 }
 
 async function buildHomeView(userId: string): Promise<Record<string, unknown>> {
+  // The model picker only makes sense for the account that pays for the API.
+  if (!isUserAllowed(userId)) {
+    return { type: 'home', blocks: content.home.blocks };
+  }
+
   const credentialResult: Promise<{
     credential: GitHubCredential | undefined;
     unreadable: boolean;
@@ -50,6 +61,7 @@ async function buildHomeView(userId: string): Promise<Record<string, unknown>> {
     { credential, unreadable },
     github,
     scheduled,
+    model,
   ] = await Promise.all([
     settled({ label: 'instructions', userId, work: getInstructions(userId) }),
     settled({ label: 'mcp', userId, work: listMCPServers(userId) }),
@@ -60,12 +72,14 @@ async function buildHomeView(userId: string): Promise<Record<string, unknown>> {
       userId,
       work: scheduledTasksBlocks(userId),
     }),
+    settled({ label: 'model', userId, work: getModelChoice(userId) }),
   ]);
   const installations =
     credential?.kind === 'app' ? await countInstallations(credential.token) : 0;
 
   const sections: HomeSection[] = [
     { fixed: [...content.home.blocks, { type: 'divider' }] },
+    ...(model ? [modelBlocks(model)] : []),
     customInstructionsBlocks(instructions),
     githubBlocks({
       credential,

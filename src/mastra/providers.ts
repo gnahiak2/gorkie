@@ -1,90 +1,57 @@
+import { createAnthropic } from '@ai-sdk/anthropic';
 import type { ModelWithRetries } from '@mastra/core/agent';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import { env } from '@/env';
-import { channelContext } from './lib/context';
-import { recallModel, slugOf } from './lib/working-model';
+import { getModelChoice } from './db/queries/settings';
+import {
+  commandCodeModels,
+  DEFAULT_MODEL,
+  type ModelId,
+  SUMMARIZER_MODEL,
+} from './types';
 
-export const hackclub = createOpenRouter({
-  apiKey: env.HACKCLUB_API_KEY,
-  baseURL: 'https://ai.hackclub.com/proxy/v1',
+const BASE_URL = 'https://api.commandcode.ai/provider/v1';
+
+const anthropic = createAnthropic({
+  apiKey: env.COMMANDCODE_API_KEY,
+  baseURL: BASE_URL,
 });
 
-function opencode(modelId: string, fallbackSession: string): ModelWithRetries {
+// The Provider API serves each model on exactly one wire format: Claude only on
+// `/messages`, everything else only on `/chat/completions`. The AI SDK factory
+// per wire decides the endpoint, so a model has to be built by its own wire or
+// the request comes back a 400. Mastra's `url` escape hatch cannot do this
+// split, because its router forces the OpenAI format for any custom URL
+// (`ModelRouterLanguageModel.resolveLanguageModel` in `@mastra/core`).
+function commandCode(id: ModelId): MastraModelConfig {
+  const group = Object.values(commandCodeModels).find((entry) =>
+    entry.models.some((model) => model.id === id)
+  );
+  if (!group) {
+    throw new Error(`Unknown Command Code model: ${id}`);
+  }
+  if (group.endpoint === 'messages') {
+    return anthropic(id);
+  }
   return {
-    model: `opencode-go/${modelId}`,
-    headers: ({ requestContext }) => ({
-      'user-agent': 'gorkie/1.0',
-      'x-opencode-session':
-        channelContext(requestContext).threadId ?? `gorkie:${fallbackSession}`,
-    }),
+    id: `openai-compatible/${id}`,
+    url: BASE_URL,
+    apiKey: env.COMMANDCODE_API_KEY,
   };
 }
 
-function modelSlug(entry: ModelWithRetries): string | undefined {
-  const { model } = entry;
-  if (typeof model === 'string') {
-    return slugOf(model);
-  }
-  if (
-    typeof model === 'object' &&
-    model !== null &&
-    'modelId' in model &&
-    typeof model.modelId === 'string'
-  ) {
-    return slugOf(model.modelId);
-  }
-}
-
-async function preferLastWorking(
-  models: ModelWithRetries[]
-): Promise<ModelWithRetries[]> {
-  const lastGoodSlug = await recallModel();
-  if (!lastGoodSlug) {
-    return models;
-  }
-  const matches: ModelWithRetries[] = [];
-  const rest: ModelWithRetries[] = [];
-  for (const entry of models) {
-    const slug = modelSlug(entry);
-    const same =
-      slug === lastGoodSlug ||
-      slug?.endsWith(`/${lastGoodSlug}`) ||
-      lastGoodSlug.endsWith(`/${slug}`);
-    (slug && same ? matches : rest).push(entry);
-  }
-  return matches.length ? [...matches, ...rest] : models;
-}
-
-function ladder(agentKey: string): ModelWithRetries[] {
-  return [
-    { ...opencode('glm-5.3-flash', agentKey), maxRetries: 3 },
-    { model: hackclub('z-ai/glm-5.3-flash'), maxRetries: 3 },
-    // Last resort only. deepseek 400s on tool-calling turns (the reasoning_content
-    // round-trip the opencode-go generic converter drops, see IMPLEMENTED.md), so
-    // it only reliably serves single-shot replies, but unlike muse-spark it does
-    // not train on submitted data.
-    { ...opencode('deepseek-v4-flash-vision-exp', agentKey), maxRetries: 3 },
+export const orchestrator = async (): Promise<ModelWithRetries[]> => {
+  const picked = await getModelChoice(env.OWNER_USER_ID);
+  const models = [
+    { model: commandCode(picked), maxRetries: 3 },
+    { model: commandCode(DEFAULT_MODEL), maxRetries: 3 },
   ];
-}
+  return picked === DEFAULT_MODEL ? models.slice(0, 1) : models;
+};
 
-const orchestratorModels = ladder('orchestrator');
-
-export const orchestrator = () => preferLastWorking(orchestratorModels);
+export const scout = orchestrator;
+export const explorer = orchestrator;
 
 export const summarizer: ModelWithRetries[] = [
-  { model: hackclub('google/gemini-3.5-flash-lite'), maxRetries: 3 },
-  { ...opencode('mimo-v2.5', 'summarizer'), maxRetries: 3 },
+  { model: commandCode(SUMMARIZER_MODEL), maxRetries: 3 },
 ];
-
-const scoutModels = ladder('research');
-
-export const scout = () => preferLastWorking(scoutModels);
-
-const explorerModels = ladder('explore');
-
-export const explorer = () => preferLastWorking(explorerModels);
-
-export const images = {
-  model: 'google/gemini-3.1-flash-image',
-  baseURL: 'https://ai.hackclub.com/proxy/v1',
-};

@@ -25,7 +25,6 @@ import { delegatedTools } from '../processors/delegated-tools';
 import { sandbox } from '../processors/sandbox';
 import { moveToolImages } from '../processors/tool-media';
 import { turnFooter } from '../processors/turn-footer';
-import { workingModel } from '../processors/working-model';
 import { instructions } from '../prompts';
 import { githubPrompt } from '../prompts/github';
 import { reasoningPrompt } from '../prompts/reasoning';
@@ -147,12 +146,7 @@ const orchestrator = new Agent({
     }),
     new ProviderHistoryCompat({ additionalRules: [moveToolImages] }),
   ],
-  outputProcessors: [
-    delegatedTools,
-    sandbox,
-    turnFooter,
-    workingModel(config.id),
-  ],
+  outputProcessors: [delegatedTools, sandbox, turnFooter],
   tools: async ({ requestContext }) => {
     const { channelId, isDM, threadId, userId } =
       channelContext(requestContext);

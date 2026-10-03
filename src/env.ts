@@ -19,10 +19,13 @@ export const env = createEnv({
     SLACK_BOT_TOKEN: z.string().min(1),
     SLACK_APP_TOKEN: z.string().min(1),
     SLACK_USER_TOKEN: z.string().min(1),
-    OPT_IN_CHANNEL: z.string().optional(),
 
-    HACKCLUB_API_KEY: z.string().min(1),
-    OPENCODE_API_KEY: z.string().min(1),
+    // The only Slack account gorkie answers. Anyone else is ignored, so the
+    // Command Code key is never spent on anyone else's messages.
+    OWNER_USER_ID: z.string().regex(/^U[A-Z0-9]+$/),
+
+    // Command Code Provider API. https://commandcode.ai/docs/provider
+    COMMANDCODE_API_KEY: z.string().min(1),
 
     DATABASE_URL: z.url(),
 
