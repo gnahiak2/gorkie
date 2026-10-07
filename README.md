@@ -73,7 +73,7 @@ the App Home, scopes, and event subscriptions. You also need [Bun][bun], a
 
 ```bash
 # Clone this repository
-git clone https://github.com/techwithanirudh/gorkie.git
+git clone https://github.com/gnahiak2/gorkie.git
 
 # Install dependencies
 bun install
