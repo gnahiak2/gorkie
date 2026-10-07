@@ -169,16 +169,18 @@ before renaming or splitting anything, never from vibes.
   block) and imported as `env.WHATEVER` everywhere else.
 - Magic numbers or strings that could plausibly change per deployment
   belong in `src/mastra/config.ts`, not inlined at the call site.
-- Model keys, Slack tokens, and DB credentials never enter the E2B
-  sandbox. They live on the host only.
+- Model keys, Slack tokens, and DB credentials never enter the sandbox
+  environment. They stay on the host; the only credentials a command sees reach
+  it for the duration of the tool call that needs them.
 
 ## Architecture boundaries
 
 These come from [AGENTS.md](./AGENTS.md); repeated here because violating
 them is a correctness bug, not a style nit.
 
-- Never run user- or agent-generated code on the host. All execution goes
-  through the E2B sandbox.
+- Code execution runs on the host through Mastra's `LocalSandbox`, one
+  directory per Slack thread. Keep it scoped there; a tool must not escape its
+  thread's directory.
 - Never hand-roll what Mastra `channels` already provides: streaming,
   thread-history backfill, multi-user prefixing, typing status. Shape it
   through `handlers`, `threadContext`, and subscription state instead of

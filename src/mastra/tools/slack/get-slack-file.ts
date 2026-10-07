@@ -1,3 +1,5 @@
+import { mkdir, open, rm, stat, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { fetchSlackFile } from '@chat-adapter/slack/api';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
@@ -5,9 +7,12 @@ import { env } from '@/env';
 import { slack } from '../../chat/client';
 import { channelContext } from '../../lib/context';
 import { spendSlackCall } from '../../lib/slack-budget';
-import { sh } from '../../lib/utils';
 import { input, output } from '../../types/tools/index';
-import { sandboxPath as p, requireSandbox } from '../../workspace';
+import {
+  sandboxPath as p,
+  requireSandbox,
+  sandboxAbsolutePath,
+} from '../../workspace';
 import { assertReadableResource } from './utils';
 
 function formatBytes(value: number): string {
@@ -15,12 +20,6 @@ function formatBytes(value: number): string {
     return `${Math.ceil(value / 1024)} KB`;
   }
   return `${Math.ceil(value / 1024 / 1024)} MB`;
-}
-
-function throwIfAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) {
-    throw new Error('File download aborted.');
-  }
 }
 
 export const getSlackFileTool = createTool({
@@ -53,7 +52,10 @@ export const getSlackFileTool = createTool({
     if (!context?.requestContext) {
       throw new Error('No workspace context.');
     }
-    const sandbox = await requireSandbox(context.requestContext);
+    // Resolves the thread and makes sure its working directory exists. The
+    // download then streams straight to disk, since the local sandbox is the
+    // host and there is no remote filesystem to route through.
+    await requireSandbox(context.requestContext);
 
     const fileId = /(F[A-Z0-9]{6,})/.exec(file)?.[1];
     if (!fileId) {
@@ -62,7 +64,7 @@ export const getSlackFileTool = createTool({
       );
     }
 
-    spendSlackCall(context?.requestContext);
+    spendSlackCall(context.requestContext);
 
     const fileInfo = (await slack.webClient.files.info({ file: fileId })).file;
     await assertReadableResource({
@@ -86,81 +88,18 @@ export const getSlackFileTool = createTool({
         ? 'slack-file'
         : sanitized;
     const path = p('downloads', name);
-    await sandbox.retryOnDead(() => sandbox.e2b.files.makeDir(p('downloads')));
-    const partPath = `${path}.part`;
-    const nextPath = `${path}.next`;
-    const mergePath = `${path}.merge`;
+    const absolute = await sandboxAbsolutePath({
+      path,
+      requestContext: context.requestContext,
+    });
+    await mkdir(dirname(absolute), { recursive: true });
     const formatResult = (size: number) => ({
       path,
       filename: name,
       mimeType: fileInfo?.mimetype,
       size,
     });
-    const writeResponseBody = async (
-      body: ReadableStream<Uint8Array>,
-      targetPath: string
-    ) => {
-      let downloaded = 0;
-      // Not wrapped in retryOnDead: a ReadableStream is single-use, so a retry
-      // would re-pipe an already-locked stream (and double-count `downloaded`).
-      // A dead sandbox mid-download surfaces as an error; the next call resumes
-      // from the `.part` file instead.
-      await sandbox.e2b.files.write(
-        targetPath,
-        body.pipeThrough(
-          new TransformStream<Uint8Array, Uint8Array>({
-            transform(chunk, controller) {
-              throwIfAborted(context.abortSignal);
-              downloaded += chunk.byteLength;
-              controller.enqueue(chunk);
-            },
-          })
-        ),
-        { signal: context.abortSignal, useOctetStream: true }
-      );
-      throwIfAborted(context.abortSignal);
-      return downloaded;
-    };
-    const commitDownload = async () => {
-      await sandbox.retryOnDead(async () => {
-        await sandbox.e2b.files.remove(path).catch(() => undefined);
-        await sandbox.e2b.files.rename(partPath, path);
-        await sandbox.e2b.files.remove(nextPath).catch(() => undefined);
-        await sandbox.e2b.files.remove(mergePath).catch(() => undefined);
-      });
-    };
-    const mergeDownload = async () => {
-      const result = await sandbox.retryOnDead(() =>
-        sandbox.e2b.commands.run(
-          `cat ${sh(partPath)} ${sh(nextPath)} > ${sh(mergePath)} && mv ${sh(mergePath)} ${sh(partPath)} && rm -f ${sh(nextPath)}`
-        )
-      );
-      if (result.exitCode !== 0) {
-        throw new Error(`Failed to merge resumed download: ${result.stderr}`);
-      }
-    };
-    const fetchResponse = (resumeOffset?: number) => {
-      const fetchWithRange = Object.assign(
-        (input: URL | RequestInfo, init?: RequestInit) => {
-          const requestHeaders = new Headers(init?.headers);
-          if (resumeOffset !== undefined) {
-            requestHeaders.set('range', `bytes=${resumeOffset}-`);
-          }
-          return fetch(input, {
-            ...init,
-            headers: requestHeaders,
-            signal: context.abortSignal,
-          });
-        },
-        { preconnect: fetch.preconnect }
-      );
 
-      return fetchSlackFile({
-        fetch: fetchWithRange,
-        token: env.SLACK_BOT_TOKEN,
-        url,
-      });
-    };
     const expectedSize =
       fileInfo?.size ??
       (await fetch(url, {
@@ -172,71 +111,52 @@ export const getSlackFileTool = createTool({
         .then((size) => (Number.isFinite(size) && size >= 0 ? size : undefined))
         .catch(() => undefined));
 
-    const existingFinal = await sandbox
-      .retryOnDead(() => sandbox.e2b.files.getInfo(path))
-      .catch(() => undefined);
-    if (expectedSize !== undefined && existingFinal?.size === expectedSize) {
+    const existing = await stat(absolute).catch(() => undefined);
+    if (expectedSize !== undefined && existing?.size === expectedSize) {
       return formatResult(expectedSize);
     }
 
     if (expectedSize === 0) {
-      await sandbox.retryOnDead(() =>
-        sandbox.e2b.commands.run(`rm -f ${sh(path)} && : > ${sh(path)}`)
-      );
-      return formatResult(expectedSize);
+      await writeFile(absolute, '');
+      return formatResult(0);
     }
 
-    const existingPart = await sandbox
-      .retryOnDead(() => sandbox.e2b.files.getInfo(partPath))
-      .catch(() => undefined);
-    const resumeAt = existingPart?.size ?? 0;
-    if (expectedSize !== undefined && resumeAt === expectedSize) {
-      await commitDownload();
-      return formatResult(expectedSize);
-    }
-
-    if (expectedSize !== undefined && resumeAt > expectedSize) {
-      await sandbox.retryOnDead(() =>
-        sandbox.e2b.files.remove(partPath).catch(() => undefined)
-      );
-    }
-
-    await sandbox.retryOnDead(async () => {
-      await sandbox.e2b.files.remove(nextPath).catch(() => undefined);
-      await sandbox.e2b.files.remove(mergePath).catch(() => undefined);
+    const response = await fetchSlackFile({
+      fetch: Object.assign(
+        (input: URL | RequestInfo, init?: RequestInit) =>
+          fetch(input, { ...init, signal: context.abortSignal }),
+        { preconnect: fetch.preconnect }
+      ),
+      token: env.SLACK_BOT_TOKEN,
+      url,
     });
-
-    const resumeOffset =
-      expectedSize !== undefined && resumeAt < expectedSize ? resumeAt : 0;
-    const response = await fetchResponse(
-      resumeOffset > 0 ? resumeOffset : undefined
-    );
-    if (!(response.ok && (resumeOffset === 0 || response.status === 206))) {
+    if (!response.ok) {
       throw new Error(`Failed to download Slack file: ${response.status}`);
     }
     if (!response.body) {
       throw new Error('Slack file response did not include a body.');
     }
 
-    const downloadedSize = await writeResponseBody(
-      response.body,
-      resumeOffset > 0 ? nextPath : partPath
-    );
-
-    if (resumeOffset > 0) {
-      await mergeDownload();
+    const handle = await open(absolute, 'w');
+    try {
+      for await (const chunk of response.body) {
+        await handle.write(chunk);
+      }
+    } catch (error) {
+      // A failed or aborted download must not leave a partial file at the final
+      // path, where a later read would take it for the whole file.
+      await rm(absolute, { force: true }).catch(() => undefined);
+      throw error;
+    } finally {
+      await handle.close();
     }
 
-    const finalPart = await sandbox.retryOnDead(() =>
-      sandbox.e2b.files.getInfo(partPath)
-    );
-    if (expectedSize !== undefined && finalPart.size !== expectedSize) {
+    const final = await stat(absolute);
+    if (expectedSize !== undefined && final.size !== expectedSize) {
       throw new Error(
-        `Downloaded ${formatBytes(finalPart.size)} but expected ${formatBytes(expectedSize)}.`
+        `Downloaded ${formatBytes(final.size)} but expected ${formatBytes(expectedSize)}.`
       );
     }
-    await commitDownload();
-
-    return formatResult(expectedSize ?? downloadedSize);
+    return formatResult(expectedSize ?? final.size);
   },
 });

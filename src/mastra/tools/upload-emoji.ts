@@ -2,7 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { env } from '@/env';
 import { input, output } from '../types/tools/index';
-import { requireSandbox } from '../workspace';
+import { readSandboxFile } from '../workspace';
 
 const EMOJI_PROXY_URL =
   'https://hackclub-slack-emoji-proxy.vercel.app/api/emoji';
@@ -64,10 +64,10 @@ export const uploadEmojiTool = createTool({
       if (!context?.requestContext) {
         throw new Error('No workspace context.');
       }
-      const sandbox = await requireSandbox(context.requestContext);
-      const bytes = await sandbox.retryOnDead(() =>
-        sandbox.e2b.files.read(path, { format: 'bytes' })
-      );
+      const bytes = await readSandboxFile({
+        path,
+        requestContext: context.requestContext,
+      });
       const form = new FormData();
       form.set('name', name);
       form.set(

@@ -1,3 +1,5 @@
+import { createReadStream } from 'node:fs';
+import { Readable, Transform } from 'node:stream';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { slack } from '../../chat/client';
@@ -6,7 +8,11 @@ import { upload } from '../../config';
 import { channelContext } from '../../lib/context';
 import { parseSlackId, rawId } from '../../lib/ids';
 import { input, output } from '../../types/tools/index';
-import { requireSandbox } from '../../workspace';
+import {
+  requireSandbox,
+  sandboxAbsolutePath,
+  statSandboxFile,
+} from '../../workspace';
 import { assertCanPostTo, joinChannel } from './utils';
 
 async function slackDestination(
@@ -64,11 +70,12 @@ export const uploadFileTool = createTool({
     if (!context?.requestContext) {
       throw new Error('No workspace context.');
     }
-    const sandbox = await requireSandbox(context.requestContext);
+    await requireSandbox(context.requestContext);
 
-    const stat = await sandbox.retryOnDead(() =>
-      sandbox.e2b.files.getInfo(path)
-    );
+    const stat = await statSandboxFile({
+      path,
+      requestContext: context.requestContext,
+    });
     if (stat.size > upload.maxBytes) {
       throw new Error(
         `${path} is ${Math.round(stat.size / 1_000_000)}MB, over the ${upload.maxBytes / 1_000_000}MB upload limit.`
@@ -98,24 +105,27 @@ export const uploadFileTool = createTool({
     if (!(created.upload_url && created.file_id)) {
       throw new Error('Slack did not return an upload URL.');
     }
-    const source = await sandbox.retryOnDead(() =>
-      // The read is drained at whatever rate Slack accepts bytes, and the idle
-      // window defaults to the 60s request timeout, so a large file over a
-      // slow link trips it partway through. 0 disables it.
-      sandbox.e2b.files.read(path, {
-        format: 'stream',
-        streamIdleTimeoutMs: 0,
-      })
-    );
+    // The local sandbox is the host, so the file is read straight off disk as a
+    // stream rather than through a sandbox file API with no stream variant.
+    const absolute = await sandboxAbsolutePath({
+      path,
+      requestContext: context.requestContext,
+    });
     let uploaded = 0;
-    const body = source.pipeThrough(
-      new TransformStream<Uint8Array, Uint8Array>({
-        transform(chunk, controller) {
+    const counted = createReadStream(absolute).pipe(
+      new Transform({
+        transform(chunk, _encoding, callback) {
           uploaded += chunk.byteLength;
-          controller.enqueue(chunk);
+          callback(null, chunk);
         },
       })
     );
+    // Node's `stream/web` and the DOM `ReadableStream` disagree on the buffered
+    // helpers (blob/text/bytes/json) though the runtime object is the same, so
+    // the conversion is cast at the fetch boundary.
+    const body = Readable.toWeb(
+      counted
+    ) as unknown as ReadableStream<Uint8Array>;
     // `duplex: 'half'` is mandatory for a stream body on Node's undici and is
     // missing from the DOM `RequestInit` type. Bun tolerates its absence,
     // which is why this only failed once it ran under `mastra dev`.
@@ -128,7 +138,6 @@ export const uploadFileTool = createTool({
     if (!sent.ok) {
       throw new Error(`Upload to Slack failed with ${sent.status}.`);
     }
-    // A stream E2B reclaims server-side ends cleanly rather than erroring, and
     // Slack accepts a body shorter than the length it was promised, so a
     // truncated file otherwise publishes looking intact. Check before
     // completing: an unfinished upload id expires on its own, a published

@@ -3,7 +3,6 @@ import { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { DuckDBStore } from '@mastra/duckdb';
-import { LangfuseExporter } from '@mastra/langfuse';
 import { MastraStorageExporter, Observability } from '@mastra/observability';
 import { env } from '@/env';
 import { exploreAgent as explore } from './agents/explore';
@@ -15,7 +14,6 @@ import { setChat } from './chat/instance';
 import { setMastra } from './chat/mastra-instance';
 import { postgresStore, runMigrations } from './db';
 import { logger } from './lib/logger';
-import { LangfuseFeedbackExporter } from './observability/langfuse-feedback';
 import { slackIdentity } from './observability/slack-identity';
 
 process.on('unhandledRejection', (err: unknown) => {
@@ -60,17 +58,7 @@ export const mastra = new Mastra({
           SpanType.WORKSPACE_ACTION,
         ],
         serviceName: 'orchestrator',
-        exporters: [
-          ...(isProduction ? [] : [new MastraStorageExporter()]),
-          new LangfuseFeedbackExporter(),
-          new LangfuseExporter({
-            baseUrl: env.LANGFUSE_BASE_URL,
-            environment: env.NODE_ENV,
-            publicKey: env.LANGFUSE_PUBLIC_KEY,
-            realtime: !isProduction,
-            secretKey: env.LANGFUSE_SECRET_KEY,
-          }),
-        ],
+        exporters: [new MastraStorageExporter()],
         spanOutputProcessors: [slackIdentity],
       },
     },

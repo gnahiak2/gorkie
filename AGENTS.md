@@ -1,9 +1,9 @@
 # gorkie
 
 This project is a customizable AI assistant for Slack, built on Bun,
-TypeScript, Mastra channels, Chat SDK's Slack adapter in Socket Mode, E2B
-sandboxes, Postgres, and Mastra observability (local DuckDB in development,
-plus Langfuse).
+TypeScript, Mastra channels, Chat SDK's Slack adapter in Socket Mode, Mastra's
+LocalSandbox, Postgres, and Mastra observability (local DuckDB in development,
+Postgres in production).
 
 ## CRITICAL: Load the `mastra` skill first
 
@@ -39,27 +39,28 @@ One Mastra `Agent` (`orchestrator`) serves Slack through Mastra's built-in
 Channels owns Socket Mode, streaming, live tool widgets, typing
 status, thread-history backfill, and `MastraStateAdapter`.
 
-The agent brain runs on the host. Code execution runs in a per-thread **E2B** sandbox (isolated cloud Linux VM). Model keys, Slack tokens, and DB credentials live on the host and never enter the sandbox.
+The agent brain and its code execution both run on the host. Each Slack thread
+gets its own working directory under `.sandbox/`, driven by Mastra's
+`LocalSandbox`, so a turn's commands see the host filesystem and OS rather than
+an isolated VM. Slack and database credentials are kept out of the sandbox
+environment on purpose; GitHub and AgentMail credentials reach a command only
+for the duration of the specific tool call that needs them.
 
 Storage is **Postgres** for agent memory and channel state. Long-term memory uses
 thread-scoped **Observational Memory**.
-Observability traces go to **Langfuse** (`@mastra/langfuse`), configured in
-`src/mastra/index.ts`. In development they are also written to a local DuckDB
-file (`observability.duckdb`, anchored to `env.PROJECT_ROOT` rather than cwd,
-wired via `MastraStorageExporter` on a `MastraCompositeStore` domain override).
-DuckDB is single-writer, so a running `mastra dev`/`mastra start` holds the
-lock; query it read-only while the server is stopped.
-
-`slackIdentity` (`src/mastra/observability/slack-identity.ts`) stamps the Slack
-identity onto the root span, so `sessionId` is the Slack thread and every turn
-of a conversation collapses into one Langfuse session. `LangfuseFeedbackExporter`
-forwards feedback as Langfuse scores, which `@mastra/langfuse` does not do
-itself because it implements no `onFeedbackEvent` handler.
+Observability traces are written by `MastraStorageExporter`
+(`@mastra/observability`), to Postgres in production and to a local DuckDB file
+in development (`observability.duckdb`, anchored to `env.PROJECT_ROOT` rather
+than cwd, wired via a `MastraCompositeStore` domain override). DuckDB is
+single-writer, so a running `mastra dev`/`mastra start` holds the lock; query it
+read-only while the server is stopped. Feedback (Slack thumbs and
+`submit_feedback`) lands in the same store, since `MastraStorageExporter`
+implements `onFeedbackEvent`.
 
 ## Boundaries
 
-- Never run user/agent code on the host. E2B sandbox only; nothing else touches our OS.
-- Never put secrets (model keys, Slack tokens, DB creds) into the sandbox.
+- Code execution runs on the host through Mastra's `LocalSandbox`, one working directory per Slack thread. Keep it there: the agent loop itself never shells out, and a tool must not escape its thread's directory.
+- Never put secrets (model keys, Slack tokens, DB creds) into the sandbox environment. `createSandbox` builds it from a fixed allowlist; do not widen it to `process.env`.
 - Never hand-roll what channels already does (streaming, history fetch, multi-user prefixes). Control it through `handlers`, `threadContext`, and subscription state.
 - Never read `process.env` outside `src/env.ts`.
 - Ask first: dependency changes, schema-shape changes, destructive git operations.

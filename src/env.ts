@@ -29,12 +29,6 @@ export const env = createEnv({
 
     DATABASE_URL: z.url(),
 
-    LANGFUSE_BASE_URL: z.string().default('https://cloud.langfuse.com'),
-    LANGFUSE_PUBLIC_KEY: z.string().min(1),
-    LANGFUSE_SECRET_KEY: z.string().min(1),
-
-    E2B_API_KEY: z.string().min(1),
-
     CREDENTIALS_KEY: z
       .base64()
       .refine((value) => Buffer.from(value, 'base64').length === 32, {

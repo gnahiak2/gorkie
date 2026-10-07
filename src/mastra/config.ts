@@ -1,12 +1,16 @@
+import { join } from 'node:path';
 import { env } from '@/env';
+
 export const sandbox = {
-  template: 'gorkie-workspace:2.0',
-  executionTimeout: 15 * 60 * 1000,
-  timeout: 16 * 60 * 1000,
-  // A cold clone or a large push runs well past E2B's 60s request default, and
-  // a timeout there retries the whole clone inside the credential window.
+  // Each thread gets its own working directory under here. The local sandbox
+  // runs commands directly on this host, so these are real paths, not a VM.
+  root: join(env.PROJECT_ROOT, '.sandbox'),
+  // LocalSandbox default per-operation timeout, and the cap on one foreground
+  // command.
+  timeout: 15 * 60 * 1000,
+  // A cold clone or a large push runs well past a shell default, and a timeout
+  // there retries the whole clone inside the credential window.
   gitTimeout: 5 * 60 * 1000,
-  workdir: '/home/user',
 };
 
 export const upload = {

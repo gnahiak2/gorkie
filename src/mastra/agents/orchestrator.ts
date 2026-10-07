@@ -22,7 +22,6 @@ import { logger } from '../lib/logger';
 import { stepCountIs, toolCall } from '../lib/tools';
 import { userMCPTools } from '../mcp/user-servers';
 import { delegatedTools } from '../processors/delegated-tools';
-import { sandbox } from '../processors/sandbox';
 import { moveToolImages } from '../processors/tool-media';
 import { turnFooter } from '../processors/turn-footer';
 import { instructions } from '../prompts';
@@ -35,7 +34,7 @@ import {
 import { workspaceCodeModePrompt } from '../tools/code-mode/slack';
 import { githubTools } from '../tools/github';
 import { deferredTools, orchestratorTools } from '../tools/toolsets';
-import { pauseSandbox, workspace } from '../workspace';
+import { workspace } from '../workspace';
 import { exploreAgent } from './explore';
 import { researchAgent } from './research';
 
@@ -109,7 +108,6 @@ const orchestrator = new Agent({
     stopWhen: [toolCall('wait'), stepCountIs(config.maxSteps)],
     autoResumeSuspendedTools: true,
     onAbort: async () => {
-      await pauseSandbox(requestContext);
       const { threadId } = channelContext(requestContext);
       if (!threadId) {
         return;
@@ -123,11 +121,6 @@ const orchestrator = new Agent({
       } catch (error) {
         logger.debug('[orchestrator] failed to post abort notice', { error });
       }
-    },
-    onError: async () => {
-      // A thrown turn never reaches the `sandbox` output processor either, so
-      // pause here too rather than leave the sandbox running until its timeout.
-      await pauseSandbox(requestContext);
     },
   }),
   workspace,
@@ -146,7 +139,7 @@ const orchestrator = new Agent({
     }),
     new ProviderHistoryCompat({ additionalRules: [moveToolImages] }),
   ],
-  outputProcessors: [delegatedTools, sandbox, turnFooter],
+  outputProcessors: [delegatedTools, turnFooter],
   tools: async ({ requestContext }) => {
     const { channelId, isDM, threadId, userId } =
       channelContext(requestContext);

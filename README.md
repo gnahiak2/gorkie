@@ -13,8 +13,9 @@ own.
 The bot is a long-lived Bun process. [Mastra][mastra]'s built-in
 [channels][channels] feature handles Slack events, wiring the [Vercel Chat
 SDK][chat-sdk] Slack adapter in Socket Mode while the agent runs on Mastra's
-native runtime. Each Slack thread gets its own [E2B][e2b] sandbox, so gorkie
-runs commands and inspects files without touching the host machine.
+native runtime. Each Slack thread gets its own working directory, driven by
+Mastra's `LocalSandbox`, so gorkie can run commands and inspect files for that
+conversation without them leaking into another.
 
 ## Features
 
@@ -22,7 +23,9 @@ runs commands and inspects files without touching the host machine.
   streamed as they generate, with a typing indicator.
 - Single-owner bot: only the `OWNER_USER_ID` account gets replies, and everyone
   else is ignored. The model is picked from the App Home and stored per user.
-- Per-thread [E2B][e2b] sandbox sessions: isolated cloud VMs, never the host.
+- Per-thread sandbox sessions: a working directory under `.sandbox/`, one per
+  Slack thread, backed by Mastra's `LocalSandbox`, so commands run on the host
+  but stay scoped to the conversation.
   Full filesystem access (`read_file`/`write_file`/`edit_file`/`list_files`/
   `delete_file`/`file_stat`) plus shell command execution
   (`execute_command`) with background process support (`get_process_output`,
@@ -54,18 +57,19 @@ See [TODO.md](./TODO.md) for open work and known issues.
 - [Vercel Chat SDK][chat-sdk] with `@chat-adapter/slack` (via Mastra channels)
 - [Command Code][command-code] Provider API as the single model gateway, with
   the model chosen from the App Home and a fallback if it fails
-- [E2B][e2b] sandbox sessions
+- Mastra's `LocalSandbox` for per-thread code execution on the host
 - [Exa][exa] for web search and page fetching
 - [PostgreSQL][postgres] via `@mastra/pg`
-- Mastra Observability, exported to local [DuckDB][duckdb]
+- Mastra Observability, stored locally in [DuckDB][duckdb] in development and
+  in Postgres in production
 
 ## Getting started
 
 Create a new [Slack app](https://api.slack.com/apps) from a manifest using
 [`slack-manifest.json`](./slack-manifest.json), which turns on Socket Mode,
 the App Home, scopes, and event subscriptions. You also need [Bun][bun], a
-[PostgreSQL][postgres] database, an [E2B][e2b] API key, an [Exa][exa] API key,
-and a [Command Code][command-code] API key.
+[PostgreSQL][postgres] database, an [Exa][exa] API key, and a
+[Command Code][command-code] API key.
 
 ```bash
 # Clone this repository
@@ -76,9 +80,6 @@ bun install
 
 # Copy and fill in the environment
 cp .env.example .env
-
-# Build the configured E2B sandbox image
-bun run build:template
 
 # Run the bot locally (also serves Mastra Studio at http://localhost:4111)
 bun run dev
@@ -107,16 +108,12 @@ local database named `gorkie`. Mastra creates its tables on first run.
 | `OWNER_USER_ID` | yes | The only Slack account gorkie answers (`U…`). Messages from anyone else are ignored |
 | `COMMANDCODE_API_KEY` | yes | [Command Code][command-code] Provider API key. Every model, both wire formats |
 | `DATABASE_URL` | yes | Postgres connection string |
-| `LANGFUSE_PUBLIC_KEY` | yes | Langfuse public key. Tracing is the only production exporter, so the agent refuses to start without it |
-| `LANGFUSE_SECRET_KEY` | yes | Langfuse secret key |
-| `LANGFUSE_BASE_URL` | no | Self-hosted Langfuse only; defaults to `https://cloud.langfuse.com` |
-| `E2B_API_KEY` | yes | E2B sandbox key (`e2b_…`) |
 | `CREDENTIALS_KEY` | yes | Encrypts connected GitHub and MCP tokens at rest (`openssl rand -base64 32`) |
 | `GITHUB_APP_SLUG` | yes | The app's URL slug, used to link people to the install page |
 | `GITHUB_APP_CLIENT_ID` | yes | GitHub App client id, for the App Home sign-in (see [docs/github-app.md](./docs/github-app.md)) |
 | `GITHUB_APP_CLIENT_SECRET` | yes | GitHub App client secret, used to refresh expiring user tokens |
 | `EXA_API_KEY` | yes | Exa key, powers `search_web`/`fetch_url` |
-| `AGENTMAIL_API_KEY` | no | Lets the sandbox reach the AgentMail API as `gorkie@agentmail.to`, without the key entering the sandbox |
+| `AGENTMAIL_API_KEY` | no | Lets commands reach the AgentMail API as `gorkie@agentmail.to`. The key is present in the sandbox environment, since there is no firewall to broker it through |
 
 See [`.env.example`](./.env.example) for the full annotated list.
 
@@ -133,7 +130,7 @@ src/
     agents/research.ts          Delegated Slack/web research helper agent
     agents/explore.ts           Delegated read-only codebase exploration helper agent
     chat/                       Chat SDK client, handlers, typing status
-    workspace/                  E2B sandbox workspace (per-thread, isolated)
+    workspace/                  Local sandbox workspace (per-thread directory)
     tools/                      Tool registry: Slack, canvas, scheduled tasks, sandbox, web, code mode
     processors/                 Input/output processors (delegated tools, sandbox, tool media)
     prompts/                    System prompt sections (core, personality, Slack, tools)
@@ -149,7 +146,6 @@ Socket Mode connection.
 bun run dev             # Mastra Studio and the Slack bot
 bun run build           # Production build
 bun run start           # Run the production build
-bun run build:template  # Build the configured E2B image
 bun run typecheck
 bun run check           # Biome/ultracite
 bun run check:spelling
@@ -162,7 +158,6 @@ bun run check:spelling
 [mastra]: https://mastra.ai
 [channels]: https://mastra.ai/docs/channels/overview
 [chat-sdk]: https://github.com/vercel/chat-sdk
-[e2b]: https://e2b.dev
 [exa]: https://exa.ai
 [command-code]: https://commandcode.ai/docs/provider
 [postgres]: https://www.postgresql.org

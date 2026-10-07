@@ -76,6 +76,7 @@
     "ENOENT",
     "EVJSSG",
     "exfiltration",
+    "extraheader",
     "fallocate",
     "fallover",
     "fdfind",

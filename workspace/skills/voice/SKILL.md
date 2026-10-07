@@ -1,11 +1,11 @@
 ---
 name: voice
-description: Text-to-speech and speech-to-text audio work in the sandbox. Use when the user asks to generate voice/audio from text, create a spoken message, transcribe an audio or voice message, convert audio formats, inspect spoken content, or prepare audio files for Slack upload. Uses ffmpeg plus Python packages gTTS, SpeechRecognition, and pydub that are preinstalled in gorkie's E2B sandbox.
+description: Text-to-speech and speech-to-text audio work in the sandbox. Use when the user asks to generate voice/audio from text, create a spoken message, transcribe an audio or voice message, convert audio formats, inspect spoken content, or prepare audio files for Slack upload. Uses ffmpeg plus the Python packages gTTS, SpeechRecognition, and pydub; install them with pip if the host does not already have them.
 ---
 
 # Voice
 
-Use this skill for speech-to-text and text-to-speech tasks in the sandbox. Keep generated and converted files under `/home/user/downloads` unless the user asks for another path.
+Use this skill for speech-to-text and text-to-speech tasks in the sandbox. Keep generated and converted files under `downloads` unless the user asks for another path.
 
 ## Text to speech
 
@@ -16,15 +16,15 @@ python3 - <<'PY'
 from gtts import gTTS
 
 text = """Replace this with the text to speak."""
-gTTS(text=text, lang="en").save("/home/user/downloads/voice-message.mp3")
-print("/home/user/downloads/voice-message.mp3")
+gTTS(text=text, lang="en").save("downloads/voice-message.mp3")
+print("downloads/voice-message.mp3")
 PY
 ```
 
 For Slack-friendly output, prefer MP3 or M4A. Convert with ffmpeg when needed:
 
 ```bash
-ffmpeg -y -i /home/user/downloads/voice-message.mp3 -c:a aac /home/user/downloads/voice-message.m4a
+ffmpeg -y -i downloads/voice-message.mp3 -c:a aac downloads/voice-message.m4a
 ```
 
 ## Speech to text
@@ -32,14 +32,14 @@ ffmpeg -y -i /home/user/downloads/voice-message.mp3 -c:a aac /home/user/download
 First convert the source audio to mono WAV, then transcribe it.
 
 ```bash
-ffmpeg -y -i /home/user/downloads/audio_clip.m4a -ac 1 -ar 16000 /home/user/downloads/audio_clip.wav
+ffmpeg -y -i downloads/audio_clip.m4a -ac 1 -ar 16000 downloads/audio_clip.wav
 ```
 
 ```bash
 python3 - <<'PY'
 import speech_recognition as sr
 
-path = "/home/user/downloads/audio_clip.wav"
+path = "downloads/audio_clip.wav"
 recognizer = sr.Recognizer()
 
 with sr.AudioFile(path) as source:

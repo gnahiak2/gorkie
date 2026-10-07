@@ -1,7 +1,10 @@
 import type { ToolsInput } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/request-context';
-import { createCodeMode, createCodeModeTool } from '@mastra/core/tools';
-import { E2BCodeModeTransport } from '@mastra/e2b';
+import {
+  createCodeMode,
+  createCodeModeTool,
+  StdioCodeModeTransport,
+} from '@mastra/core/tools';
 import { sandbox as sandboxConfig } from '../../config';
 import { mcpTools } from '../../mcp';
 import { codeModePrompt } from '../../prompts/features/code-mode';
@@ -10,7 +13,7 @@ import { workspaceTools } from '../../workspace/tools';
 import { canvasTools } from '../canvas';
 import { slackTools } from '../slack';
 
-const transport = new E2BCodeModeTransport();
+const transport = new StdioCodeModeTransport();
 
 function codeTools(mcp: Awaited<ReturnType<typeof mcpTools>>) {
   return {
@@ -68,7 +71,7 @@ async function createCodeModeInstance({
     : slackCodeTools;
   const modeConfig = {
     id: 'slack',
-    timeout: sandboxConfig.executionTimeout,
+    timeout: sandboxConfig.timeout,
     tools,
   };
   const mode = createCodeMode(modeConfig, transport);
@@ -79,7 +82,7 @@ async function createCodeModeInstance({
     }
     const sandbox = await getSandbox(context.requestContext);
     if (!sandbox) {
-      throw new Error('No E2B sandbox available for Slack code mode.');
+      throw new Error('No sandbox available for Slack code mode.');
     }
 
     const { execute } = createCodeModeTool(

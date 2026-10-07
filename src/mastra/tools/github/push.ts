@@ -1,5 +1,4 @@
 import { createTool } from '@mastra/core/tools';
-import { sandbox as sandboxConfig } from '../../config';
 import { sh } from '../../lib/utils';
 import { branchSchema, repositorySchema } from '../../types';
 import { input } from '../../types/tools/index';
@@ -42,7 +41,7 @@ export const pushTool = ({
       // the target repo; for a fork PR it is the upstream repo that was cloned,
       // not the fork we push to, so the two are tracked apart.
       const source = checkout ?? repository;
-      const path = `${sandboxConfig.workdir}/${source.replace('/', '__')}`;
+      const path = source.replace('/', '__');
       const remote = `https://github.com/${repository}.git`;
       const push = () =>
         git({

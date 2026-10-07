@@ -1,5 +1,4 @@
 import { createTool } from '@mastra/core/tools';
-import { sandbox as sandboxConfig } from '../../config';
 import { channelContext } from '../../lib/context';
 import { githubAccess, githubAccessToken } from '../../lib/github';
 import { repoAccess } from '../../lib/github/api';
@@ -47,7 +46,7 @@ export const checkoutTool = ({
     }),
     execute: async ({ repository, branch }, context) => {
       const sandbox = await requireSandbox(context.requestContext);
-      const path = `${sandboxConfig.workdir}/${repository.replace('/', '__')}`;
+      const path = repository.replace('/', '__');
       const remote = `https://github.com/${repository}.git`;
 
       const token = await githubAccessToken(userId);

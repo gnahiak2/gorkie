@@ -49,6 +49,9 @@ output.txt
 *.duckdb
 *.duckdb.wal
 
+# Local sandbox working directories (per Slack thread)
+/.sandbox
+
 *.log
 
 # Crash dumps

@@ -1,18 +1,16 @@
-import { sandbox } from '../../config';
-
 const filesSection = `
 <files>
-Ignore the rule above about having no filesystem access. Your program runs as Node inside this thread's E2B sandbox, the same one the direct file tools and execute_command act on, and external_read_file, external_write_file, external_edit_file, external_list_files, external_file_stat, external_delete_file, external_grep, and external_execute_command take the same arguments there as their direct counterparts.
+Ignore the rule above about having no filesystem access. Your program runs as Node inside this thread's sandbox working directory, the same one the direct file tools and execute_command act on, and external_read_file, external_write_file, external_edit_file, external_list_files, external_file_stat, external_delete_file, external_grep, and external_execute_command take the same arguments there as their direct counterparts.
 
 Anything you read in bulk goes to a file, not into your return value: full channel or thread exports, every page of a paginated read, the per-message records behind a count. Write the file, then return the path with a count and a couple of sample rows. This is the normal shape of a program that reads a lot, not a fallback for when the result gets too big, and a return value over the size limit is rejected outright, so the rows would be lost anyway.
 
 const rows = pages.flatMap((page) => page.messages);
-await external_write_file({ path: '${sandbox.workdir}/thread-export.json', content: JSON.stringify(rows, null, 2) });
-return { path: '${sandbox.workdir}/thread-export.json', count: rows.length, sample: rows.slice(0, 3) };
+await external_write_file({ path: 'thread-export.json', content: JSON.stringify(rows, null, 2) });
+return { path: 'thread-export.json', count: rows.length, sample: rows.slice(0, 3) };
 
 Overwriting a file that already exists requires reading it earlier in the same program; a new path needs no read. Node built-ins also work, but the program body is a function body, so load them with dynamic import (const { writeFile } = await import('node:fs/promises')) instead of a top-level import.
 
-Paths must stay under ${sandbox.workdir}. Files persist for the whole thread, so a later turn can read_file, grep, or execute_command over them, or upload_file the result to Slack.
+Paths are relative to your working directory. Files persist for the whole thread, so a later turn can read_file, grep, or execute_command over them, or upload_file the result to Slack.
 </files>
 `;
 

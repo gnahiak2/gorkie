@@ -3,16 +3,14 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { RequestContext } from '@mastra/core/request-context';
 import {
+  LocalFilesystem,
+  LocalSandbox,
   LocalSkillSource,
   WORKSPACE_TOOLS,
   Workspace,
 } from '@mastra/core/workspace';
-import { E2BSandbox } from '@mastra/e2b';
-import { sandbox as config } from '../config';
 import { channelContext } from '../lib/context';
-import { logger } from '../lib/logger';
-import { E2BFilesystem } from './filesystem';
-import { createSandbox } from './sandbox';
+import { createSandbox, sandboxDirectory } from './sandbox';
 import {
   DELETE_FILE,
   EDIT_FILE,
@@ -26,19 +24,13 @@ import {
   WRITE_FILE,
 } from './tool-names';
 
-const reached = new WeakSet<RequestContext>();
-
-export function usedSandbox(requestContext: RequestContext): boolean {
-  return reached.has(requestContext);
-}
-
 export async function requireSandbox(
   requestContext: RequestContext
-): Promise<E2BSandbox> {
+): Promise<LocalSandbox> {
   // Real command/filesystem work needs a real thread. The `sandbox` resolver
-  // degrades to a shared `__unscoped__` sandbox so Mastra's pre-bind
+  // degrades to a shared `__unscoped__` directory so Mastra's pre-bind
   // instruction read never crashes a turn, but a tool must not silently run
-  // commands in that scratch sandbox: fail loudly instead.
+  // commands in that scratch directory: fail loudly instead.
   if (!channelContext(requestContext).threadId) {
     throw new Error(
       'No Slack thread bound for this run, so a sandbox tool cannot run here.'
@@ -54,39 +46,60 @@ export async function requireSandbox(
 
 export async function getSandbox(
   requestContext: RequestContext
-): Promise<E2BSandbox | undefined> {
+): Promise<LocalSandbox | undefined> {
   const sandbox = await workspace.resolveSandbox({ requestContext });
-  if (!(sandbox instanceof E2BSandbox)) {
-    return;
-  }
-  reached.add(requestContext);
-  return sandbox;
+  return sandbox instanceof LocalSandbox ? sandbox : undefined;
 }
 
-// Pause the thread's sandbox and drop its cache entry. The `sandbox` output
-// processor calls this on a normal turn, but that phase never runs on an abort
-// or a thrown turn, so `onAbort`/`onError` call it too: otherwise the sandbox
-// stays live until its own 16 minute timeout after every stopped turn.
-export async function pauseSandbox(
-  requestContext: RequestContext
-): Promise<void> {
-  if (!usedSandbox(requestContext)) {
-    return;
+export async function readSandboxFile({
+  path,
+  requestContext,
+}: {
+  path: string;
+  requestContext: RequestContext;
+}): Promise<Buffer> {
+  const filesystem = await workspace.resolveFilesystem({ requestContext });
+  if (!filesystem) {
+    throw new Error('No workspace filesystem available.');
   }
-  const { threadId } = channelContext(requestContext);
-  try {
-    const sandbox = await getSandbox(requestContext);
-    await sandbox?.retryOnDead(() => sandbox.e2b.pause());
-  } catch (error) {
-    logger.debug('[sandbox] failed to pause', { error });
+  const content = await filesystem.readFile(path);
+  return Buffer.isBuffer(content) ? content : Buffer.from(content);
+}
+
+export async function statSandboxFile({
+  path,
+  requestContext,
+}: {
+  path: string;
+  requestContext: RequestContext;
+}) {
+  const filesystem = await workspace.resolveFilesystem({ requestContext });
+  if (!filesystem) {
+    throw new Error('No workspace filesystem available.');
   }
-  if (threadId) {
-    workspace.clearSandboxCache(threadId);
+  return filesystem.stat(path);
+}
+
+// Absolute host path for a sandbox file, containment-checked by the resolved
+// filesystem. The local sandbox is the host, so tools that stream (a large
+// upload or download) work on this path with node:fs instead of buffering.
+export async function sandboxAbsolutePath({
+  path,
+  requestContext,
+}: {
+  path: string;
+  requestContext: RequestContext;
+}): Promise<string> {
+  const filesystem = await workspace.resolveFilesystem({ requestContext });
+  const absolute = filesystem?.resolveAbsolutePath?.(path);
+  if (!absolute) {
+    throw new Error('No workspace filesystem available.');
   }
+  return absolute;
 }
 
 export { sandboxPath } from './path';
-export { codeModeToolNames, workspaceToolNames } from './tool-names';
+export { codeModeToolNames } from './tool-names';
 
 export const workspace: Workspace = new Workspace({
   id: 'main-workspace',
@@ -96,19 +109,14 @@ export const workspace: Workspace = new Workspace({
     // Degrade instead of throw. Mastra can resolve workspace instructions
     // before a thread is bound (and a scheduled/idle wake may arrive without
     // channel context), and throwing here failed the whole turn and every
-    // fallback model. A contextless run gets a shared scratch sandbox; real
+    // fallback model. A contextless run gets a shared scratch directory; real
     // turns still key on their own thread, so sandbox continuity is unchanged.
     return createSandbox(threadId ?? '__unscoped__');
   },
-  filesystem: async ({ requestContext }) => {
-    const sandbox = await getSandbox(requestContext);
-    if (!sandbox) {
-      throw new Error('No E2B sandbox available for filesystem.');
-    }
-
-    return new E2BFilesystem({
-      sandbox,
-      basePath: config.workdir,
+  filesystem: ({ requestContext }) => {
+    const { threadId } = channelContext(requestContext);
+    return new LocalFilesystem({
+      basePath: sandboxDirectory(threadId ?? '__unscoped__'),
     });
   },
   sandboxCacheKey: ({ requestContext }) =>
@@ -150,9 +158,8 @@ export const workspace: Workspace = new Workspace({
     [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
       name: EXECUTE_COMMAND,
       // Without this the default is the agent's own abort signal, so every
-      // `background: true` process is killed the moment the turn ends. Mastra
-      // documents `false` as the setting for cloud sandboxes like E2B, where
-      // the process is supposed to outlive the agent that started it.
+      // `background: true` process is killed the moment the turn ends. The
+      // background process is meant to outlive the agent that started it.
       backgroundProcesses: { abortSignal: false },
     },
     [WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT]: {
