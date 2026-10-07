@@ -1,6 +1,7 @@
 import { createTool } from '@mastra/core/tools';
+import { SafeSearchType, search } from 'duck-duck-scrape';
 import { z } from 'zod';
-import { exa } from '../lib/exa';
+import { htmlToText } from '../lib/html';
 import { input, output } from '../types/tools/index';
 
 export const searchWebTool = createTool({
@@ -21,7 +22,6 @@ export const searchWebTool = createTool({
         title: z.string(),
         url: z.url(),
         text: z.string(),
-        publishedDate: z.string().optional(),
       })
     ),
   }),
@@ -33,20 +33,17 @@ export const searchWebTool = createTool({
     },
   },
   execute: async ({ query }) => {
-    const { results } = await exa.search(query, {
-      type: 'auto',
-      numResults: 8,
-      contents: { text: { maxCharacters: 1200 } },
+    const { results } = await search(query, {
+      safeSearch: SafeSearchType.MODERATE,
     });
-    const links = results.slice(0, 5).map((r) => r.url);
+    const trimmed = results.slice(0, 8).map((result) => ({
+      title: htmlToText(result.title) || result.url,
+      url: result.url,
+      text: htmlToText(result.description),
+    }));
     return {
-      links,
-      results: results.map((r) => ({
-        title: r.title ?? r.url,
-        url: r.url,
-        text: r.text ?? '',
-        publishedDate: r.publishedDate,
-      })),
+      links: trimmed.slice(0, 5).map((result) => result.url),
+      results: trimmed,
     };
   },
 });

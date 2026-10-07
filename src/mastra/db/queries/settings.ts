@@ -1,12 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { rawId } from '../../lib/ids';
-import {
-  DEFAULT_MODEL,
-  type GitHubPermission,
-  githubPermissionSchema,
-  type ModelId,
-  modelIdSchema,
-} from '../../types';
+import { DEFAULT_MODEL, type ModelId, modelIdSchema } from '../../types';
 import { db } from '../client';
 import { userSettings } from '../schema';
 
@@ -34,71 +28,27 @@ export async function setInstructions({
     .onConflictDoUpdate({ target: userSettings.userId, set });
 }
 
-export async function getModelChoice(userId: string): Promise<ModelId> {
+// The model picker is shared: whoever picks, every turn uses that model. The
+// choice lives in one `user_settings` row under this key instead of a Slack
+// user id, so it does not belong to whoever happened to pick it.
+const SHARED_MODEL_USER = 'shared';
+
+export async function getModelChoice(): Promise<ModelId> {
   const [row] = await db
     .select({ model: userSettings.model })
     .from(userSettings)
-    .where(eq(userSettings.userId, rawId(userId)));
+    .where(eq(userSettings.userId, SHARED_MODEL_USER));
   return modelIdSchema.catch(DEFAULT_MODEL).parse(row?.model);
 }
 
 export async function setModelChoice({
-  userId,
   model,
 }: {
-  userId: string;
   model: ModelId;
 }): Promise<void> {
-  await db
-    .update(userSettings)
-    .set({ model, updatedAt: new Date() })
-    .where(eq(userSettings.userId, rawId(userId)));
-}
-
-interface GitHubSettings {
-  permission: GitHubPermission;
-  threads: boolean;
-}
-
-export async function getGitHubSettings(
-  userId: string
-): Promise<GitHubSettings> {
-  const [row] = await db
-    .select({
-      permission: userSettings.githubPermission,
-      threads: userSettings.githubThreads,
-    })
-    .from(userSettings)
-    .where(eq(userSettings.userId, rawId(userId)));
-  return {
-    permission: githubPermissionSchema.parse(row?.permission),
-    threads: row?.threads === true,
-  };
-}
-
-export async function setGitHubSettings({
-  permission,
-  threads,
-  userId,
-}: GitHubSettings & { userId: string }): Promise<void> {
-  const set = {
-    githubPermission: permission,
-    githubThreads: threads,
-    updatedAt: new Date(),
-  };
+  const set = { model, updatedAt: new Date() };
   await db
     .insert(userSettings)
-    .values({ ...set, instructions: null, userId: rawId(userId) })
+    .values({ ...set, userId: SHARED_MODEL_USER })
     .onConflictDoUpdate({ target: userSettings.userId, set });
-}
-
-export async function clearGitHubSettings(userId: string): Promise<void> {
-  await db
-    .update(userSettings)
-    .set({
-      githubPermission: null,
-      githubThreads: null,
-      updatedAt: new Date(),
-    })
-    .where(eq(userSettings.userId, rawId(userId)));
 }

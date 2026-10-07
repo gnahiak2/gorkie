@@ -25,14 +25,12 @@ import { delegatedTools } from '../processors/delegated-tools';
 import { moveToolImages } from '../processors/tool-media';
 import { turnFooter } from '../processors/turn-footer';
 import { instructions } from '../prompts';
-import { githubPrompt } from '../prompts/github';
 import { reasoningPrompt } from '../prompts/reasoning';
 import {
   orchestrator as orchestratorModel,
   summarizer as summarizerModel,
 } from '../providers';
 import { workspaceCodeModePrompt } from '../tools/code-mode/slack';
-import { githubTools } from '../tools/github';
 import { deferredTools, orchestratorTools } from '../tools/toolsets';
 import { workspace } from '../workspace';
 import { exploreAgent } from './explore';
@@ -46,15 +44,7 @@ const orchestrator = new Agent({
       ...instructions(requestContext),
       { role: 'system' as const, content: await workspaceCodeModePrompt() },
     ];
-    const { isDM, userId } = channelContext(requestContext);
-    const github = await githubPrompt({
-      isDM: isDM === true,
-      requestContext,
-      userId,
-    });
-    if (github) {
-      messages.push({ role: 'system' as const, content: github });
-    }
+    const { userId } = channelContext(requestContext);
     const userInstructions = userId
       ? await getInstructions(userId).catch((error: unknown) => {
           logger.debug('[orchestrator] failed to load user instructions', {
@@ -141,23 +131,13 @@ const orchestrator = new Agent({
   ],
   outputProcessors: [delegatedTools, turnFooter],
   tools: async ({ requestContext }) => {
-    const { channelId, isDM, threadId, userId } =
-      channelContext(requestContext);
+    const { userId } = channelContext(requestContext);
     const base = await orchestratorTools();
     if (!userId) {
       return base;
     }
-    const [userTools, github] = await Promise.all([
-      userMCPTools({ userId }),
-      githubTools({
-        channelId,
-        isDM: isDM === true,
-        requestContext,
-        threadId,
-        userId,
-      }),
-    ]);
-    return { ...userTools, ...github, ...base };
+    const userTools = await userMCPTools({ userId });
+    return { ...userTools, ...base };
   },
   agents: {
     research: researchAgent,

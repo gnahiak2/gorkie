@@ -41,7 +41,7 @@ function commandCode(id: ModelId): MastraModelConfig {
 }
 
 export const orchestrator = async (): Promise<ModelWithRetries[]> => {
-  const picked = await getModelChoice(env.OWNER_USER_ID);
+  const picked = await getModelChoice();
   const models = [
     { model: commandCode(picked), maxRetries: 3 },
     { model: commandCode(DEFAULT_MODEL), maxRetries: 3 },

@@ -24,7 +24,7 @@ function delegatedChildTool(
 
 export const status: TypingStatusFn = (chunk, context) => {
   // Slack caps a status at 50 characters and the built-in approval text is 28
-  // plus the tool name, which the longer github_ names overflow.
+  // plus the tool name, which long MCP tool names overflow.
   if (chunk.type === 'tool-call-approval') {
     return truncate(`is asking about ${label(chunk.payload.toolName)}…`);
   }
@@ -44,12 +44,6 @@ export const status: TypingStatusFn = (chunk, context) => {
       );
     }
     return truncate(`is spawning a ${label(rest).toLowerCase()} agent…`);
-  }
-
-  if (toolName.startsWith('github_')) {
-    return truncate(
-      `is using github: ${label(toolName.slice('github_'.length)).toLowerCase()}…`
-    );
   }
 
   const args = argsSchema.safeParse(chunk.payload.args).data ?? {};

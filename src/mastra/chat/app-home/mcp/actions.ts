@@ -42,15 +42,6 @@ async function addServer({
     return { action: 'errors' as const, errors };
   }
 
-  const isGitHub = new URL(parsed.data.url).host === 'api.githubcopilot.com';
-  if (isGitHub || parsed.data.name.toLowerCase() === 'github') {
-    const message =
-      'GitHub has its own section above. Use Sign in with GitHub instead.';
-    return {
-      action: 'errors' as const,
-      errors: isGitHub ? { url: message } : { name: message },
-    };
-  }
   const urlError = await findMCPUrlError(parsed.data.url);
   if (urlError) {
     return { action: 'errors' as const, errors: { url: urlError } };

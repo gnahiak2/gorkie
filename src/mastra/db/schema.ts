@@ -1,24 +1,5 @@
-import {
-  boolean,
-  pgTable,
-  primaryKey,
-  text,
-  timestamp,
-} from 'drizzle-orm/pg-core';
-import type { GitHubPermission, ToolPermission } from '../types';
-
-export const githubCredentials = pgTable('github_credentials', {
-  userId: text('user_id').primaryKey(),
-  kind: text('kind').$type<'app' | 'pat'>().notNull(),
-  login: text('login').notNull(),
-  token: text('token').notNull(),
-  refreshToken: text('refresh_token'),
-  expiresAt: timestamp('expires_at', { withTimezone: true }),
-  scopes: text('scopes'),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+import { pgTable, primaryKey, text, timestamp } from 'drizzle-orm/pg-core';
+import type { ToolPermission } from '../types';
 
 export const mcpServers = pgTable(
   'mcp_servers',
@@ -42,8 +23,6 @@ export const userSettings = pgTable('user_settings', {
   userId: text('user_id').primaryKey(),
   instructions: text('instructions'),
   model: text('model'),
-  githubPermission: text('github_permission').$type<GitHubPermission>(),
-  githubThreads: boolean('github_threads'),
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

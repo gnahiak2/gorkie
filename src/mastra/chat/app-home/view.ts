@@ -1,17 +1,9 @@
-import { getGitHubCredential } from '../../db/queries/github';
 import { listMCPServers } from '../../db/queries/mcps';
-import {
-  getGitHubSettings,
-  getInstructions,
-  getModelChoice,
-} from '../../db/queries/settings';
-import { countInstallations } from '../../lib/github';
+import { getInstructions, getModelChoice } from '../../db/queries/settings';
 import { logger } from '../../lib/logger';
-import { isUserAllowed } from '../../lib/owner';
-import type { GitHubCredential } from '../../types';
+import { isOwner } from '../../lib/owner';
 import { slack } from '../client';
 import { content } from '../content';
-import { githubBlocks } from './github';
 import { customInstructionsBlocks } from './instructions';
 import { fitHome, type HomeSection } from './limit';
 import { mcpServersBlocks } from './mcp';
@@ -35,59 +27,21 @@ async function settled<T>({
 }
 
 async function buildHomeView(userId: string): Promise<Record<string, unknown>> {
-  // The model picker only makes sense for the account that pays for the API.
-  if (!isUserAllowed(userId)) {
-    return { type: 'home', blocks: content.home.blocks };
-  }
-
-  const credentialResult: Promise<{
-    credential: GitHubCredential | undefined;
-    unreadable: boolean;
-  }> = getGitHubCredential(userId).then(
-    (credential) => ({ credential, unreadable: false }),
-    (error) => {
-      logger.error('[app-home] section failed to load', {
-        error,
-        label: 'github',
-        userId,
-      });
-      return { credential: undefined, unreadable: true };
-    }
-  );
-
-  const [
-    instructions,
-    mcpServers,
-    { credential, unreadable },
-    github,
-    scheduled,
-    model,
-  ] = await Promise.all([
+  const [instructions, mcpServers, scheduled, model] = await Promise.all([
     settled({ label: 'instructions', userId, work: getInstructions(userId) }),
     settled({ label: 'mcp', userId, work: listMCPServers(userId) }),
-    credentialResult,
-    settled({ label: 'settings', userId, work: getGitHubSettings(userId) }),
     settled({
       label: 'scheduled',
       userId,
       work: scheduledTasksBlocks(userId),
     }),
-    settled({ label: 'model', userId, work: getModelChoice(userId) }),
+    settled({ label: 'model', userId, work: getModelChoice() }),
   ]);
-  const installations =
-    credential?.kind === 'app' ? await countInstallations(credential.token) : 0;
 
   const sections: HomeSection[] = [
     { fixed: [...content.home.blocks, { type: 'divider' }] },
-    ...(model ? [modelBlocks(model)] : []),
+    ...(model && isOwner(userId) ? [modelBlocks(model)] : []),
     customInstructionsBlocks(instructions),
-    githubBlocks({
-      credential,
-      installations,
-      permission: github?.permission ?? 'write',
-      threads: github?.threads === true,
-      unreadable,
-    }),
     mcpServersBlocks(mcpServers ?? []),
     ...(scheduled ? [scheduled] : []),
   ];

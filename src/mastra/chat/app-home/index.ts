@@ -1,6 +1,5 @@
 import { logger } from '../../lib/logger';
 import { chat } from '../instance';
-import { registerGitHub } from './github';
 import { registerCustomInstructions } from './instructions';
 import { registerMCPServers } from './mcp';
 import { registerModel } from './model';
@@ -15,7 +14,6 @@ export function registerAppHome(): void {
   );
   registerCustomInstructions({ publishHome });
   registerModel({ publishHome });
-  registerGitHub({ publishHome });
   registerMCPServers({ publishHome });
   registerScheduledTasks({ publishHome });
 }

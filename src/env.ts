@@ -20,8 +20,8 @@ export const env = createEnv({
     SLACK_APP_TOKEN: z.string().min(1),
     SLACK_USER_TOKEN: z.string().min(1),
 
-    // The only Slack account gorkie answers. Anyone else is ignored, so the
-    // Command Code key is never spent on anyone else's messages.
+    // The account allowed to change the model from App Home. Everyone else in
+    // the workspace can use the bot, but not the picker.
     OWNER_USER_ID: z.string().regex(/^U[A-Z0-9]+$/),
 
     // Command Code Provider API. https://commandcode.ai/docs/provider
@@ -35,12 +35,6 @@ export const env = createEnv({
         message:
           'CREDENTIALS_KEY must be 32 bytes, base64 encoded. Generate one with: openssl rand -base64 32',
       }),
-
-    GITHUB_APP_SLUG: z.string().min(1),
-    GITHUB_APP_CLIENT_ID: z.string().min(1),
-    GITHUB_APP_CLIENT_SECRET: z.string().min(1),
-
-    EXA_API_KEY: z.string().min(1),
 
     AGENTMAIL_API_KEY: z.string().min(1).optional(),
     EMOJI_PROXY_TOKEN: z.string().min(1).optional(),

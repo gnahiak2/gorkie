@@ -43,8 +43,8 @@ The agent brain and its code execution both run on the host. Each Slack thread
 gets its own working directory under `.sandbox/`, driven by Mastra's
 `LocalSandbox`, so a turn's commands see the host filesystem and OS rather than
 an isolated VM. Slack and database credentials are kept out of the sandbox
-environment on purpose; GitHub and AgentMail credentials reach a command only
-for the duration of the specific tool call that needs them.
+environment on purpose; the only secret a command can see is
+`AGENTMAIL_API_KEY`, and only when it is set.
 
 Storage is **Postgres** for agent memory and channel state. Long-term memory uses
 thread-scoped **Observational Memory**.

@@ -1,5 +1,5 @@
 import { setModelChoice } from '../../../db/queries/settings';
-import { isUserAllowed } from '../../../lib/owner';
+import { isOwner } from '../../../lib/owner';
 import { modelIdSchema } from '../../../types';
 import { chat } from '../../instance';
 import { ids } from './ids';
@@ -13,14 +13,14 @@ export function registerModel({
     const {
       user: { userId },
     } = event;
-    if (!isUserAllowed(userId)) {
+    if (!isOwner(userId)) {
       return;
     }
     const model = modelIdSchema.safeParse(event.value);
     if (!model.success) {
       return;
     }
-    await setModelChoice({ userId, model: model.data });
+    await setModelChoice({ model: model.data });
     await publishHome(userId);
   });
 }

@@ -1,6 +1,5 @@
 import type { Message, Thread } from 'chat';
 import { logger } from '../lib/logger';
-import { isUserAllowed } from '../lib/owner';
 import { attachments } from './attachments';
 import { slack } from './client';
 import { handleCommand } from './commands';
@@ -57,9 +56,6 @@ export async function onMention(
   if (isFromBot(message)) {
     return;
   }
-  if (!isUserAllowed(message.author.userId)) {
-    return;
-  }
   if (slack.decodeThreadId(message.threadId).threadTs === message.id) {
     await thread.setState({ respondOnThreadMessages: true });
   }
@@ -82,9 +78,6 @@ export async function onSubscribedMessage(
   if (!(isFollowingThread || message.isMention)) {
     return;
   }
-  if (!isUserAllowed(message.author.userId)) {
-    return;
-  }
   if (await handleCommand({ message, thread })) {
     return;
   }
@@ -97,9 +90,6 @@ export async function onDirectMessage(
   defaultHandler: DefaultHandler
 ): Promise<void> {
   if (isFromBot(message)) {
-    return;
-  }
-  if (!isUserAllowed(message.author.userId)) {
     return;
   }
   if (await handleCommand({ message, thread })) {

@@ -21,8 +21,10 @@ conversation without them leaking into another.
 
 - Slack-native replies for mentions, DMs, and subscribed thread follow-ups,
   streamed as they generate, with a typing indicator.
-- Single-owner bot: only the `OWNER_USER_ID` account gets replies, and everyone
-  else is ignored. The model is picked from the App Home and stored per user.
+- Open to the whole workspace: any member who mentions, DMs, or follows a
+  thread gets a reply, and through the sandbox can run commands on the host, so
+  only run it in a workspace you trust. The model is picked from the App Home by
+  the `OWNER_USER_ID` account and shared by every conversation.
 - Per-thread sandbox sessions: a working directory under `.sandbox/`, one per
   Slack thread, backed by Mastra's `LocalSandbox`, so commands run on the host
   but stay scoped to the conversation.
@@ -33,8 +35,9 @@ conversation without them leaking into another.
 - Delegated helper agents for research (Slack and web lookups) and codebase
   exploration (read-only workspace inspection), so multi-step digging stays
   out of the main conversation.
-- Web search and page fetching via [Exa][exa], plus a Slack "code mode" tool
-  for query-driven or exhaustive conversation analysis.
+- Web search via [DuckDuckGo][duckduckgo] and page fetching through Mastra's
+  `web_fetch`, plus a Slack "code mode" tool for query-driven or exhaustive
+  conversation analysis.
 - Slack-native tools: read/summarize conversation history, list threads and
   channels, inspect channels and users, post to another thread/channel/DM,
   upload and download files, react, leave a thread. It reads only the current
@@ -58,7 +61,7 @@ See [TODO.md](./TODO.md) for open work and known issues.
 - [Command Code][command-code] Provider API as the single model gateway, with
   the model chosen from the App Home and a fallback if it fails
 - Mastra's `LocalSandbox` for per-thread code execution on the host
-- [Exa][exa] for web search and page fetching
+- [DuckDuckGo][duckduckgo] for web search, Mastra's `web_fetch` for page fetching
 - [PostgreSQL][postgres] via `@mastra/pg`
 - Mastra Observability, stored locally in [DuckDB][duckdb] in development and
   in Postgres in production
@@ -68,8 +71,7 @@ See [TODO.md](./TODO.md) for open work and known issues.
 Create a new [Slack app](https://api.slack.com/apps) from a manifest using
 [`slack-manifest.json`](./slack-manifest.json), which turns on Socket Mode,
 the App Home, scopes, and event subscriptions. You also need [Bun][bun], a
-[PostgreSQL][postgres] database, an [Exa][exa] API key, and a
-[Command Code][command-code] API key.
+[PostgreSQL][postgres] database, and a [Command Code][command-code] API key.
 
 ```bash
 # Clone this repository
@@ -105,14 +107,10 @@ local database named `gorkie`. Mastra creates its tables on first run.
 | `SLACK_BOT_TOKEN` | yes | Bot User OAuth token (`xoxb-…`) |
 | `SLACK_APP_TOKEN` | yes | App-level token with `connections:write` (`xapp-…`) |
 | `SLACK_USER_TOKEN` | yes | Slack user token, not the bot token, used for public-channel search. Mint it with `search:read.public` only; gorkie verifies the granted scopes on first use and refuses the token if it also carries `search:read.im`, `search:read.mpim`, or `search:read.private`. See [docs/slack-search.md](docs/slack-search.md) |
-| `OWNER_USER_ID` | yes | The only Slack account gorkie answers (`U…`). Messages from anyone else are ignored |
+| `OWNER_USER_ID` | yes | The Slack account allowed to change the model from the App Home (`U…`). Everyone else can use the bot, but not the picker |
 | `COMMANDCODE_API_KEY` | yes | [Command Code][command-code] Provider API key. Every model, both wire formats |
 | `DATABASE_URL` | yes | Postgres connection string |
-| `CREDENTIALS_KEY` | yes | Encrypts connected GitHub and MCP tokens at rest (`openssl rand -base64 32`) |
-| `GITHUB_APP_SLUG` | yes | The app's URL slug, used to link people to the install page |
-| `GITHUB_APP_CLIENT_ID` | yes | GitHub App client id, for the App Home sign-in (see [docs/github-app.md](./docs/github-app.md)) |
-| `GITHUB_APP_CLIENT_SECRET` | yes | GitHub App client secret, used to refresh expiring user tokens |
-| `EXA_API_KEY` | yes | Exa key, powers `search_web`/`fetch_url` |
+| `CREDENTIALS_KEY` | yes | Encrypts connected MCP tokens at rest (`openssl rand -base64 32`) |
 | `AGENTMAIL_API_KEY` | no | Lets commands reach the AgentMail API as `gorkie@agentmail.to`. The key is present in the sandbox environment, since there is no firewall to broker it through |
 
 See [`.env.example`](./.env.example) for the full annotated list.
@@ -158,7 +156,7 @@ bun run check:spelling
 [mastra]: https://mastra.ai
 [channels]: https://mastra.ai/docs/channels/overview
 [chat-sdk]: https://github.com/vercel/chat-sdk
-[exa]: https://exa.ai
+[duckduckgo]: https://duckduckgo.com
 [command-code]: https://commandcode.ai/docs/provider
 [postgres]: https://www.postgresql.org
 [duckdb]: https://duckdb.org

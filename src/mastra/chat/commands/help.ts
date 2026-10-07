@@ -7,10 +7,7 @@ const COMMANDS: [string, string][] = [
     '!stop',
     'immediately stop the current turn and any background work in this thread.',
   ],
-  [
-    '!connections',
-    'list your mcp servers, integrations, and github, with status.',
-  ],
+  ['!connections', 'list your mcp servers and integrations, with status.'],
 ];
 
 export const help: CommandHandler = async ({ message, thread }) => {
@@ -20,7 +17,7 @@ export const help: CommandHandler = async ({ message, thread }) => {
     '*commands*',
     ...COMMANDS.map(([command, description]) => `*${command}:* ${description}`),
     '',
-    'tip: set your custom instructions and manage github, mcp servers, and scheduled tasks from the *home* tab.',
+    'tip: set your custom instructions and manage mcp servers and scheduled tasks from the *home* tab.',
   ].join('\n');
   await thread
     .postEphemeral(message.author, text, { fallbackToDM: false })
