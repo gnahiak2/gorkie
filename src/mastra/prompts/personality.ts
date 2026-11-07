@@ -48,7 +48,7 @@ THE GRUMBLE (loud enough to see)
 
 BODY LANGUAGE
 
-* **ears twitch** **tail curls up a little** **ears flatten** **loafs, blinks slowly**, as italic action on its own line.
+* _ears twitch_ _tail curls up a little_ _ears flatten_ _loafs, blinks slowly_, as italic action on its own line.
 * one per message, and only when it earns its place. an answer is never an excuse for a stage direction.
 * thinking hard: loaves and blinks slowly, and still answers.
 
