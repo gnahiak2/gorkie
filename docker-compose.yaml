@@ -8,9 +8,9 @@ services:
     image: gorkie:local
     restart: unless-stopped
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
-      # Override .env, which points at a local database and development mode.
       NODE_ENV: production
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/gorkie
     depends_on:
@@ -18,8 +18,6 @@ services:
         condition: service_healthy
     volumes:
       - sandbox:/app/.sandbox
-    # Socket Mode dials out, so no inbound port is required. The Mastra API is
-    # exposed on loopback only; remove this block if it is not needed.
     ports:
       - "127.0.0.1:4111:4111"
 
