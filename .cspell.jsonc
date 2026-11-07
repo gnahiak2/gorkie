@@ -138,6 +138,7 @@
     "myfork",
     "networkidle",
     "nohup",
+    "noninteractive",
     "NSMFZFB",
     "nullish",
     "numpy",
@@ -158,10 +159,12 @@
     "pino",
     "pkce",
     "pooler",
+    "poppler",
     "Postable",
     "postbuild",
     "Ppene",
     "Prefs",
+    "procps",
     "pstack",
     "PVBZA",
     "pydub",
@@ -201,6 +204,7 @@
     "theirhandle",
     "thrashy",
     "timestamptz",
+    "tini",
     "TOCTOU",
     "togglable",
     "Toolsets",
@@ -232,6 +236,7 @@
     "usec",
     "usergroups",
     "uslackbot",
+    "venv",
     "VUSAEB",
     "wakeup",
     "wakeups",
@@ -262,6 +267,8 @@
     "keysmash",
     "ahdhshahga",
     "hmph",
-    "nyah"
+    "nyah",
+    "esbuild",
+    "lefthook"
   ]
 }

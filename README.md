@@ -95,6 +95,37 @@ Mode connections race, and the resulting behavior is hard to diagnose.
 
 For a production-style run: `bun run build` then `bun run start`.
 
+### Docker
+
+The image builds the standalone server and ships the toolchain the sandbox
+executes commands against, so it is larger than the bot alone.
+
+```bash
+# Uses .env for every secret except the database (cp .env.example .env first)
+docker compose up --build -d
+```
+
+`docker compose` starts gorkie and a Postgres service together, overriding
+`NODE_ENV` and `DATABASE_URL` from `.env` so the bot talks to that service.
+Change the `postgres` service credentials before using this beyond a local
+machine.
+
+To build and run against an external Postgres without Compose:
+
+```bash
+docker build -t gorkie .
+docker run --rm --env-file .env \
+  -e DATABASE_URL="postgresql://user:pass@host:5432/gorkie" \
+  -v gorkie-sandbox:/app/.sandbox \
+  gorkie
+```
+
+Mount a volume at `/app/.sandbox` to keep per-thread working directories across
+restarts. The bot uses Socket Mode, so it needs no inbound port; the Mastra API
+on `4111` is bound to loopback and can stay unpublished. Trim the runtime
+`apt-get install` list in the `Dockerfile` if the sandbox does not need the full
+toolchain, since the browser, media and build packages are the heavy ones.
+
 ### Local Postgres database
 
 The default `DATABASE_URL` in [`.env.example`](./.env.example) points at a
